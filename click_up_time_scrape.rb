@@ -50,13 +50,14 @@ num_days_to_gather.times do
 end
 
 # store tasks that I already have list for
-global_tasks = {}
+task_list_mapping = {}
 
 # loop through days
 days_to_gather.each do |current_date|
 
   # hash to aggregrate data
   tasks = {}
+  lists = {} # aka projects
 
   # parse the current date
   year = current_date.year
@@ -94,21 +95,29 @@ days_to_gather.each do |current_date|
     task_id = k["task"]["id"]
     #puts "Name: #{k["task"]["name"]}, Duration #{dur_hours.round(2)} hours"
 
-    # store data
+    # store data (logic assumes tasks hvae unique name, I could store task ID instead)
     if tasks.has_key?(name)
       tasks[name]["dur_hours"] += dur_hours
-    elsif global_tasks.has_key?(name)
+    elsif task_list_mapping.has_key?(name)
 
       # don't need to call API since called on prior day
-      tasks[name] = {"dur_hours" => dur_hours, "task_id" => task_id, "list" => global_tasks[name]["list"]}
+      tasks[name] = {"dur_hours" => dur_hours, "task_id" => task_id, "list" => task_list_mapping[name]}
 
     else
       # get list for task
       task_response = RestClient.get "https://api.clickup.com/api/v2/task/#{task_id}/", headers
       task_list_name = JSON.parse(task_response)["list"]["name"]
 
-      tasks[name] = {"dur_hours" => dur_hours, "task_id" => task_id, "list" => task_list_name}
-      global_tasks[name] = {"dur_hours" => dur_hours, "task_id" => task_id, "list" => task_list_name}
+      # see if there is sub-lsit task ends with (##)
+      sub_list = name.chars.last(4).join
+      if sub_list[0,1]  == "(" && sub_list[-1,1] == ")"
+        proj_name = task_list_name[0...-3] + sub_list[1..-1] # reaplce 00 in list with sub-task number
+      else
+        proj_name = task_list_name
+      end
+
+      tasks[name] = {"dur_hours" => dur_hours, "task_id" => task_id, "list" => proj_name}
+      task_list_mapping[name] = proj_name
     end
 
   end
@@ -117,7 +126,38 @@ days_to_gather.each do |current_date|
   strings = []
   tasks.sort.each do |k,v|
     strings << "List: #{v["list"]} \tTask: #{k}, \tDuration: #{v["dur_hours"].round(2)} hours"
+
+    # add new list if nto started.
+    if lists.has_key?(v["list"])
+      lists[v["list"]]["dur_hours"] += v["dur_hours"]
+      lists[v["list"]]["tasks"][k] = v["dur_hours"]
+    else
+      lists[v["list"]] = {"dur_hours" => v["dur_hours"], "tasks" => {k => v["dur_hours"]}}
+    end
+
   end
-  puts strings.sort
+
+  #puts "Project Summary:"
+  daily_hours = 0.0
+  lists.sort.each do |k,v|
+    puts "Hours: #{v["dur_hours"].round(2)} \t #{k} \t #{v["tasks"].keys.join(", ")}"
+    daily_hours += v["dur_hours"]
+  end
+  puts "Hours: #{daily_hours.round(2)} \t (Daily Total)"
+
+  # todo - only show task details when multiple tasks in same list are done in the same day
+  lists.sort.each do |k,v|
+    next if v["tasks"].size < 2
+    puts ""
+    puts "Details for #{k}"
+    v["tasks"].each do |k2,v2|
+      puts "Hours: #{v2.round(2)} \t Task: #{k2}"
+    end
+  end
+
+  # old reporting approach that made a line for each task worked on each day without summary by list
+  #puts ""
+  #puts "Task Details:"
+  #puts strings.sort
 
 end
