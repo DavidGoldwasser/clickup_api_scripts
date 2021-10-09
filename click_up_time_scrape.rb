@@ -3,10 +3,27 @@ require 'rest-client'
 require 'json'
 
 # load configuration file
-# todo - make example config file if it doesn't already exist
 require 'yaml'
 script_path = File.expand_path(File.dirname(__FILE__))
 config_file_path = script_path + "/clickup_api_info.yml"
+
+# todo - make example config file if it doesn't already exist
+if(!File.file?(config_file_path)) 
+  puts "Yaml file not found, making a place holder #{config_file_path}."
+  puts "Please update with your personal information and then re-run the script."
+  puts "Your API key can be found under Setting/apps."
+  puts "It should not be shared or commited to this repository."
+  config = {
+    "parameters" => {
+      "authorization"=>"asdf",
+      "team_id"=>12345
+    }
+  }
+  File.write(config_file_path, config.to_yaml)
+  return
+end
+
+# load file
 config_data = YAML.load_file(config_file_path)
 
 # headers for AP call
