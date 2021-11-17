@@ -74,7 +74,10 @@ days_to_gather.each do |current_date|
   puts "#{weekday_name}: #{month}/#{day}/#{year}"
   #puts today_milli
 
-  response = RestClient.get "https://api.clickup.com/api/v2/team/#{config_data["parameters"]["team_id"]}/time_entries?start_date=#{today_milli}&end_date=#{next_milli}", headers
+  request_string = "https://api.clickup.com/api/v2/team/#{config_data["parameters"]["team_id"]}/time_entries?start_date=#{today_milli}&end_date=#{next_milli}"
+  #puts "#{request_string}, #{headers}"
+
+  response = RestClient.get request_string, headers
   response_hash = JSON.parse(response)["data"]
   #puts "#{response_hash.size} Time entires for today"
   #puts response_hash
@@ -105,19 +108,25 @@ days_to_gather.each do |current_date|
 
     else
       # get list for task
-      task_response = RestClient.get "https://api.clickup.com/api/v2/task/#{task_id}/", headers
-      task_list_name = JSON.parse(task_response)["list"]["name"]
-
-      # see if there is sub-lsit task ends with (##)
-      sub_list = name.chars.last(4).join
-      if sub_list[0,1]  == "(" && sub_list[-1,1] == ")"
-        proj_name = task_list_name[0...-3] + sub_list[1..-1] # reaplce 00 in list with sub-task number
+      begin
+        task_response = RestClient.get "https://api.clickup.com/api/v2/task/#{task_id}/", headers
+      rescue => error
+        puts "There is a problem with task #{task_id}, maybe it was deleted"
       else
-        proj_name = task_list_name
+        task_list_name = JSON.parse(task_response)["list"]["name"]
+
+        # see if there is sub-lsit task ends with (##)
+        sub_list = name.chars.last(4).join
+        if sub_list[0,1]  == "(" && sub_list[-1,1] == ")"
+          proj_name = task_list_name[0...-3] + sub_list[1..-1] # reaplce 00 in list with sub-task number
+        else
+          proj_name = task_list_name
+        end
+
+        tasks[name] = {"dur_hours" => dur_hours, "task_id" => task_id, "list" => proj_name}
+        task_list_mapping[name] = proj_name
       end
 
-      tasks[name] = {"dur_hours" => dur_hours, "task_id" => task_id, "list" => proj_name}
-      task_list_mapping[name] = proj_name
     end
 
   end
